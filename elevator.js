@@ -151,7 +151,6 @@
         },
 
         logStatus: function() {          
-          //if (elevatorObj.id !== 0) return;
           console.log('Elevator', elevatorObj.id, '-', arguments);
           console.log('currentFloor:', elevatorObj.currentFloor());
           console.log('goingUp:', elevatorObj.goingUp, '( ', elevator.goingUpIndicator() ? '▲' : '-', ' ', elevator.goingDownIndicator() ? '▼' : '-', ' )');

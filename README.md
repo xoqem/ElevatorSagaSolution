@@ -1,5 +1,7 @@
 # ElevatorSagaSolution
-I became fascinated with the Elevator Saga programming game, and decided to share the best solution I developed. It was able to beat all of the levels, though it wasn't optimized for number of moves, so beating those levels often required multiple restarts. I created wrapper objects for the floors and elevators to add functionality. Copy and paste this code into the editor box for the game.
+I became fascinated with the Elevator Saga programming game, and decided to share the best solution I developed. It was able to beat all of the levels, though it wasn't optimized for number of moves, so beating those levels often required multiple restarts. I created wrapper objects for the floors and elevators to add functionality. I also noticed that underscore was provided in existing project, so I used some of its convenience methods as well.
+
+Copy and paste the code in elevator.js into the editor box for the game.
 
 * Main game link: http://play.elevatorsaga.com/
 * Last level link (perpetual sim, no goals, fun for experiments): http://play.elevatorsaga.com/#challenge=17

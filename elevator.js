@@ -37,7 +37,7 @@
 
     // Returns a nifty string that shows the up/down arrow state for every floor in the
     // building.  Great for use in logging/debugging/
-    function getFloorsStatus() {      
+    function getFloorsStatus() {
       var logs = _.map(floorObjs, function(floorObj) {
         return '( ' + (floorObj.upArrowOn ? '▲' : '-') + ' ' + (floorObj.downArrowOn ? '▼' : '-') + ' )';
       }, this);
@@ -46,7 +46,7 @@
 
     // Create an array of floor objects (one for each floor)
     var floorObjs = _.map(floors, createFloorObj, this);
-    
+
     // Create elevator object from elevator, we'll make one these object for each elevator.
     // It is responsible for handling elevator events, and choosing a destination.  It also
     // keeps track of what buttons are selected inside the elevator.
@@ -73,15 +73,19 @@
         // or if we are stopping at our expected final destination.
         destinationFloor: NaN,
 
+        // This will be set to a floor number if the elevator is passing a
+        // and has determined it should make stop.
+        stoppingAtFloor: NaN,
+
         // Are we going up (we assume that not going up, means going down)
         goingUp: true,
 
         // Spread the default floor (when idle) for each elevator throughout
         // the bottom half of the building.  I played with a couple of options
         // here from having no default (so it would just stay on its current
-        // floor if idle), to defaulting all to floor 0.  This seemed to be
-        // just about the best (though they were pretty close).
-        defaultFloor: (index % (floors.length / 2)),
+        // floor if idle), to distributing the defaults throughout the building,
+        // and 0 seemed to be as good or better than any of the other options
+        defaultFloor: 0,
 
         // creates an array with a false (button off) for every floor
         floorButtonOn: _.map(floors, function() {
@@ -98,7 +102,7 @@
         // already has a few passengers, and let another elevator pick
         // up the waiting passenger.
         hasRoom: function() {
-          return elevator.loadFactor() < 0.3;
+          return elevator.loadFactor() < 0.6;
         },
 
         // Just a convenience, pass through method to to the elevator's
@@ -112,6 +116,45 @@
         updateArrowIndicator: function() {
           elevator.goingUpIndicator(elevatorObj.goingUp);
           elevator.goingDownIndicator(!elevatorObj.goingUp);
+        },
+
+        // Should we stop at this floor on the way to our destination,
+        // generally you will only call this when you are passing a
+        // floor and deciding if you should stop.
+        shouldStopAtFloor: function(floorNum) {
+          // if someone in the elevator has requested this stop, we must
+          // stop at the floor, regardless of other factors
+          if (elevatorObj.floorButtonOn[floorNum]) return true;
+
+          // if we don't have room, no reason to stop
+          if (!elevatorObj.hasRoom()) return false;
+
+          // otherwise, see if someone is waiting on the floor going in our
+          // direction
+          var floorObj = floorObjs[floorNum];
+          if ((elevatorObj.goingUp && floorObj.upArrowOn) ||
+              (!elevatorObj.goingUp && floorObj.downArrowOn))
+          {
+            // make sure another valid elevator isn't already stopping here
+            for (var i = 0; i < elevatorObjs.length; i++) {
+              var otherElevatorObj = elevatorObjs[i];
+              if (otherElevatorObj !== elevatorObj &&
+                otherElevatorObj.stoppingAtFloor === floorNum &&
+                otherElevatorObj.goingUp === elevatorObj.goingUp &&
+                otherElevatorObj.hasRoom())
+              {
+                // another elevator already stopping, so we shouldn't
+                return false;
+              }
+            }
+
+            // if we have someone waiting, and no other elevators are already
+            // stoppping, we should stop
+            return true;
+          }
+
+          // if no reason was found to stop, return false
+          return false;
         },
 
         // A destination is considered a good choice for a destination if
@@ -200,12 +243,12 @@
         // for the direction in which we are going, it reverses direction and
         // searches in the other direction.  If that also fails, it will send the
         // elevator to its default resting floor (if it has one), or clear the
-        // queue if it has no default floor (and the elevator would become idle 
+        // queue if it has no default floor (and the elevator would become idle
         // in that case)
         updateDesitnationFloor: function() {
           var floorToVisit;
 
-          if (elevatorObj.goingUp) {            
+          if (elevatorObj.goingUp) {
             floorToVisit = elevatorObj.getTopFloorToVisit();
             if (!_.isFinite(floorToVisit)) {
               floorToVisit = elevatorObj.getBottomFloorToVisit();
@@ -235,7 +278,7 @@
           console.log('currentFloor:', elevatorObj.currentFloor());
           console.log('goingUp:', elevatorObj.goingUp, '( ', elevator.goingUpIndicator() ? '▲' : '-', ' ', elevator.goingDownIndicator() ? '▼' : '-', ' )');
           console.log('destinationFloor:', elevatorObj.destinationFloor);
-          console.log('destinationQueue:', elevator.destinationQueue);          
+          console.log('destinationQueue:', elevator.destinationQueue);
           console.log('floorButtonOn:', elevatorObj.floorButtonOn);
           console.log('floors', getFloorsStatus());
           console.log('load', elevator.loadFactor());
@@ -254,20 +297,18 @@
       elevator.on("passing_floor", function(floorNum, direction) {
         // Just in case the final floor we should be targetting has changed since last floor
         elevatorObj.updateDesitnationFloor();
-        
-        var floorObj = floorObjs[floorNum];
-        var hasRoom = elevatorObj.hasRoom();
 
         // if someone in the elevator has requested this floor, or if we have room
         // in the elevator and someone on the floor has called an elevator for our
         // direction, then go to that floor
-        if ((elevatorObj.floorButtonOn[floorNum]) ||
-            (elevatorObj.goingUp && floorObj.upArrowOn && hasRoom) ||
-            (!elevatorObj.goingUp && floorObj.downArrowOn && hasRoom))
-        {
+        if (elevatorObj.shouldStopAtFloor(floorNum)) {
           // passing true will cause us to stop at this floor first, before
           // continuing to the current destination
           elevator.goToFloor(floorNum, true);
+
+          // set the stoppingAtFloor value so other elevators will know
+          // if we are about to visit a floor that they are considering
+          elevatorObj.stoppingAtFloor = floorNum;
         }
 
         elevatorObj.logStatus('passing_floor');
@@ -276,6 +317,9 @@
       // Handle when the elevator has stopped at a floor
       elevator.on('stopped_at_floor', function(floorNum) {
         var floorObj = floorObjs[floorNum];
+
+        // clear the stoppingAtFloor
+        elevatorObj.stoppingAtFloor = NaN;
 
         // if we have arrived ar our destination
         if (elevatorObj.destinationFloor === floorNum) {
@@ -304,7 +348,7 @@
 
         // turn off inside elevator button for floor
         elevatorObj.floorButtonOn[floorNum] = false;
-                
+
         // turn off floor arrow buttons if needed
         if (elevatorObj.goingUp && floorObj.upArrowOn) {
           floorObj.upArrowOn = false;
@@ -348,7 +392,7 @@
     }
   },
 
-  update: function(dt, elevators, floors) {    
+  update: function(dt, elevators, floors) {
     // We normally don't need to do anything here
   }
 }
